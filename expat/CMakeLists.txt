@@ -1,19 +1,18 @@
 # This file is copyrighted under the BSD-license for buildsystem files of KDE
 # copyright 2010, Patrick Spendrin <ps_ml@gmx.de>
 
-project(expat)
+cmake_minimum_required(VERSION 3.0)
 
-cmake_minimum_required(VERSION 2.6)
+project(expat VERSION 2.2.0 LANGUAGES C)
+
 set(PACKAGE_BUGREPORT "expat-bugs@libexpat.org")
 set(PACKAGE_NAME "expat")
-set(PACKAGE_VERSION "2.2.0")
 set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
 set(PACKAGE_TARNAME "${PACKAGE_NAME}")
 
-option(BUILD_tools "build the xmlwf tool for expat library" ON)
-option(BUILD_examples "build the examples for expat library" ON)
-option(BUILD_tests "build the tests for expat library" ON)
-option(BUILD_shared "build a shared expat library" ON)
+option(BUILD_TOOLS "build the xmlwf tool for expat library" OFF)
+option(BUILD_EXAMPLES "build the examples for expat library" OFF)
+option(BUILD_TESTS "build the tests for expat library" OFF)
 
 # configuration options
 set(XML_CONTEXT_BYTES 1024 CACHE STRING "Define to specify how much context to retain around the current parse point")
@@ -37,16 +36,11 @@ endif(BUILD_tests)
 
 include(ConfigureChecks.cmake)
 
-include_directories(${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/lib)
-if(MSVC)
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS -wd4996)
-endif(MSVC)
 if(WIN32)
-    add_definitions(-DWIN32)
     set(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a suffix, usually d on Windows")
 endif(WIN32)
 
-set(expat_SRCS
+add_library(expat
     lib/xmlparse.c
     lib/xmlrole.c
     lib/xmltok.c 
@@ -54,19 +48,32 @@ set(expat_SRCS
     lib/xmltok_ns.c
 )
 
-if(BUILD_shared)
-    set(_SHARED SHARED)
-    if(WIN32)
-        set(expat_SRCS ${expat_SRCS} lib/libexpat.def)
-    endif(WIN32)
-else(BUILD_shared)
-    set(_SHARED STATIC)
-    if(WIN32)
-        add_definitions(-DXML_STATIC)
-    endif(WIN32)
-endif(BUILD_shared)
-
-add_library(expat ${_SHARED} ${expat_SRCS})
+if(WIN32)
+    if(BUILD_SHARED_LIBS)
+        target_sources(expat
+            PRIVATE lib/libexpat.def
+        )
+    else(BUILD_SHARED_LIBS)
+        target_compile_definitions(expat
+            PRIVATE
+            XML_STATIC
+            INTERFACE
+            XML_STATIC
+        )
+    endif(BUILD_SHARED_LIBS)
+    if(MSVC)
+        target_compile_definitions(expat
+            PRIVATE
+            _CRT_SECURE_NO_WARNINGS
+        )
+    endif(MSVC)
+endif(WIN32)
+target_include_directories(expat
+    PRIVATE
+    $<BUILD_INTERFACE:.;lib>
+    INTERFACE
+    $<INSTALL_INTERFACE:include>
+)
 
 set(LIBCURRENT 7)   # sync
 set(LIBREVISION 2)  # with
@@ -79,9 +86,34 @@ if(NOT WIN32)
     set_property(TARGET expat PROPERTY NO_SONAME ${NO_SONAME})
 endif(NOT WIN32)
 
-install(TARGETS expat RUNTIME DESTINATION bin
-                      LIBRARY DESTINATION lib
-                      ARCHIVE DESTINATION lib)
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-config-version.cmake
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+
+install(TARGETS expat EXPORT expat
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
+
+install(EXPORT ${PROJECT_NAME}
+  FILE
+    ${PROJECT_NAME}.cmake
+  NAMESPACE
+    ${PROJECT_NAME}::
+  DESTINATION
+    lib/cmake/${PROJECT_NAME}
+)
+install(
+  FILES
+    cmake/${PROJECT_NAME}-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-config-version.cmake
+  DESTINATION
+    lib/cmake/${PROJECT_NAME}
+)
 
 set(prefix ${CMAKE_INSTALL_PREFIX})
 set(exec_prefix "\${prefix}/bin")
@@ -93,7 +125,7 @@ install(FILES lib/expat.h lib/expat_external.h DESTINATION include)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/expat.pc DESTINATION lib/pkgconfig)
 
 
-add_custom_command(TARGET expat PRE_BUILD COMMAND $(MAKE) -C doc xmlwf.1)
+# add_custom_command(TARGET expat PRE_BUILD COMMAND $(MAKE) -C doc xmlwf.1)
 
 if(BUILD_tools AND NOT WINCE)
     set(xmlwf_SRCS
@@ -104,10 +136,10 @@ if(BUILD_tools AND NOT WINCE)
     )
 
     add_executable(xmlwf ${xmlwf_SRCS})
-    set_property(TARGET xmlwf PROPERTY RUNTIME_OUTPUT_DIRECTORY xmlwf)
+    # set_property(TARGET xmlwf PROPERTY RUNTIME_OUTPUT_DIRECTORY xmlwf)
     target_link_libraries(xmlwf expat)
     install(TARGETS xmlwf DESTINATION bin)
-    install(FILES doc/xmlwf.1 DESTINATION share/man/man1)
+    # install(FILES doc/xmlwf.1 DESTINATION share/man/man1)
 endif(BUILD_tools AND NOT WINCE)
 
 if(BUILD_examples)
